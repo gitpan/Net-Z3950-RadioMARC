@@ -1,6 +1,44 @@
-$Id: Changes,v 1.15 2004/12/17 11:42:16 mike Exp $
+$Id: Changes,v 1.26 2005/03/03 15:00:29 mike Exp $
 
 Revision history for Perl extension Net::Z3950::RadioMARC.
+
+0.05  Thu Mar  3 15:01:48 GMT 2005
+	- IndexMARC.pm now uses Net::Z3950::PQF to support a larger
+	  proportion of PQF.  In particular, truncation is now
+	  supported: left, right, and left-and-right as well as none.
+	  Also, simple booleans (AND, OR, NOT).  Does not yet
+	  correctly merge word-position information, but that doesn't
+	  matter much since the only use for that information is to
+	  implement proximity, which we don't have or need.
+	- New test-script, "t/03-truncation.t", for IndexMARC's
+	  truncation support.
+	- New test-script, "t/04-boolean.t", for IndexMARC's boolean
+	  operator support.
+	- No default output for tests that yield "notfound" status:
+	  this case is now silent unless a message-template is set for
+	  "notfound".
+	- The IndexMARC module's add() method now returns an opaque
+	  token representing the newly added record, which can be used
+	  to retrieve the record with fetch().   The RadioMARC
+	  module's add() method returns an array of the opaque tokens
+	  returned to it when adding its records to the MARC index.
+	- An opaque token returned from RadioMARC::add() may be passed
+	  into test() as the "record" element of the argument hash to
+	  specify which of the test-set records the query is intended
+	  to match.
+	- Added "etc/hrm2marc.pl" to the distribution, a simple script
+	  that transforms a human-readable representation of a MARC
+	  record into ISO 2709 format.
+	- Much better example script, "bathtest.pl", tests a server's
+	  compliance with the requirements of the Bath Profile.
+	- Clarifications to the documentation, based on Bill Moen's
+	  critique.
+	- Guard against test-set records and retrieved records that
+	  lack the identity field.  Similar care taken when comparing
+	  subfield values.
+	- Only log "found multiple records" if we have indeed done so!
+	- Support multiple comma-separated candidate identity-field in
+	  the "identityField" property.
 
 0.04  Fri Dec 17 11:41:26 GMT 2004
 	- Include a real sample radioactive MARC record.
@@ -42,7 +80,6 @@ Revision history for Perl extension Net::Z3950::RadioMARC.
 	- Meaningful tests for the RadioMarc module itself
 	- Recognise "non-diagnostic failures" such as timeouts
 	- Skip tests against servers that are not even there
-	- Have IndexMARC.pm parse PQF properly and handle booleans
 	- Maybe have IndexMARC.pm parse fields more cleverly
 	- Link to an overview paper describing the approach
 

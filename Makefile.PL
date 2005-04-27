@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.3 2004/11/22 23:31:16 mike Exp $
+# $Id: Makefile.PL,v 1.4 2004/12/21 16:57:08 mike Exp $
 
 use 5.008;
 use ExtUtils::MakeMaker;
@@ -13,3 +13,9 @@ WriteMakefile(
       (ABSTRACT_FROM  => 'lib/Net/Z3950/RadioMARC.pm',
        AUTHOR         => 'Mike Taylor <mike@indexdata.com>') : ()),
 );
+
+# This forces etc/trunc.marc to get built (I hope)
+sub MY::postamble {
+    'subdirs :: etc/Makefile
+	cd etc && $(MAKE) INC=$(PASTHRU_INC) $(PASTHRU)';
+}

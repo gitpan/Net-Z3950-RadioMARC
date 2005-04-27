@@ -1,4 +1,4 @@
-# $Id: 02-indexmarc.t,v 1.2 2004/12/16 18:08:50 quinn Exp $
+# $Id: 02-indexmarc.t,v 1.4 2004/12/22 17:40:15 mike Exp $
 
 use strict;
 
@@ -46,7 +46,7 @@ SKIP: {
 		if !@stat;
 
 	    ok(1, "obtained index size");
-	    ok($stat[7] == 123924, "checked index size");
+	    ok($stat[7] == 144621, "checked index size");
 	}
     }
 
@@ -57,10 +57,12 @@ SKIP: {
     ok(join(" ", @recnum) eq "4 19 20 21", "got right 'center' records");
     ok(istr($hithash->{4}) eq "260b:1 490a:4 810b:1",
        "record 4 indexing is as expected");
-    ok(istr($hithash->{19}) eq "260b:11 710b:5",
+    ok(istr($hithash->{19}) eq "260b:10 710b:5",
        "record 19 indexing is as expected");
-    ok(istr($hithash->{20}) eq "260b:11 710a:4", "record 20 indexing is as expected");
-    ok(istr($hithash->{21}) eq "260b:19 710a:4", "record 21 indexing is as expected");
+    ok(istr($hithash->{20}) eq "260b:10 710a:4",
+       "record 20 indexing is as expected");
+    ok(istr($hithash->{21}) eq "260b:15 710a:4",
+       "record 21 indexing is as expected: ");
 
     my $marc = $index->fetch(4);
     ok($marc->subfield(260, "b") =~ /^center\b/i, "260b content");

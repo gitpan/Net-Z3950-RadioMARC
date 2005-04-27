@@ -1,4 +1,4 @@
-# $Id: RadioMARC.pm,v 1.24 2004/12/17 11:35:58 mike Exp $
+# $Id: RadioMARC.pm,v 1.32 2005/03/03 14:52:28 mike Exp $
 
 package Net::Z3950::RadioMARC;
 
@@ -14,7 +14,7 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(set add dumpindex test);
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 
 =head1 NAME
@@ -116,7 +116,7 @@ sub new {
 	    host => undef,
 	    port => 210,
 	    db => "Default",
-	    format => "USMARC",
+	    format => "USMARC",		### or "MARC21": doesn't seem to matter
 	    delay => 1,
 	    messages => {},
 	    verbosity => 1,
@@ -183,13 +183,15 @@ overrun by a large test-script.
 =item C<messages> [default: an empty hash]
 
 A reference to a hash which maps test status values to message
-templates which are used to generate the reporting output for tests
-returning that status, except when overridden by the messages
-specified for a particular test.  The interpretation of message
-templates is described in the documentation of the C<test()> method.
-Status values for which no message template is provided (i.e. all
-status value initially) are reported using a simple, explicit default
-format.
+templates.  These are used to generate the reporting output for tests,
+depending on the status returned by the test, except when overridden
+by the messages specified for that particular test (see below).
+
+The interpretation of message templates is described in the
+documentation of the C<test()> method.  Status values for which no
+message template is provided (i.e. all status value initially) are not
+reported at all, except for the status C<fail> which is reported using
+a simple, explicit default format.
 
 =item C<verbosity> [default: C<1>]
 
@@ -244,14 +246,20 @@ make whatever choices it deems appropriate without side-effects.
 
 =item C<identityField> [no default]
 
-An indication of what MARC field is taken to convey the identity of a
+An indication of what MARC field or subfield is taken to convey the
+identity of a 
 record for the purposes of comparison.  If a record in a result-set
 has the same identity-field value as the radioactive record being
 tested, then they are regarded as the same record.
 
-It may take the form I<tag> for control fields (for example C<100> to
+It may take the form I<tag> for control fields (for example C<001> to
 specify the local identifier) or I<tag>C<$>I<subfield> (for example
 C<245$a> to specify the title field).
+
+Multiple candidate identity fields may be specified, separated by
+commas, like this: C<100,035$a>.  In this case, each such candidate
+subfield is tried in turn, and the first one that exists in both
+records being compared is used.
 
 If no identity field is specified, then two records are considered to
 be the same only if they are byte-for-byte identical.
@@ -305,6 +313,11 @@ all the records that are added.  This is used when C<test()> is called
 to identify which of the C<add()>ed records is the one that should be
 retrieved from the server.
 
+C<add()> returns a list of opaque tokens representing the newly added
+records.  These tokens may be passed as the C<record> parameter into
+the C<test()> method to indicate explicitly which of the test-set
+records a particular query is intended to find.
+
 =cut
 
 sub add {
@@ -315,14 +328,18 @@ sub add {
     }
 
     my($filename) = @_;
+    my @tokens;
+
     my $file = MARC::File::USMARC->in($filename);
     die "can't open MARC file '$filename': " . $MARC::File::ERROR
 	if !defined $file;
     while (my $marc = $file->next()) {
-	$this->{index}->add($marc);
+	my $token = $this->{index}->add($marc);
+	push @tokens, $token;
     }
 
     $file->close();
+    return @tokens;
 }
 
 
@@ -351,26 +368,30 @@ sub dumpindex {
 =head2 test()
 
  $t->test('@attr 1=4 01245a01', { ok => '245$a is searchable as 1=4',
-                                  notfound => 'This server is broken' });
+                                  notfound => 'This server is broken',
+                                  record => $token });
  $t->test('@attr 1=4 thrickbrutton');
  # -- or --
  test '@attr 1=4 01245a01', { ok => '245$a is searchable as 1=4',
-                              notfound => 'This server is broken' };
+                              notfound => 'This server is broken',
+                              record => $token };
  test '@attr 1=4 thrickbrutton';
 
 Runs a single test against the server that has been nominated for the
 specified test-harness.  The first argument is a query in PQF (Prefix
 Query Format) as described in the YAZ manual at
 http://indexdata.com/yaz/doc/tools.tkl#PQF
-and the second (optional) is a reference to a hash mapping status
-values to message templates.
+and the second (optional) is a reference to hash of parameters, some
+of which are used for mapping status values to message templates.
 
 The query is analysed to see which of the test-set records it should
 find.  For maximally indicative results, it should match exactly one
 such record - no more, no less.  If it matches more than one, the the
 first one is used for the subsequent matching process: that is, the
 one that occurred earliest in MARC file that first C<add()>ed to the
-test-set.
+test-set.  If the parameter C<record> is provided, then its value is
+use as the opaque token of the test-set record to be used and the
+query is not used for this purpose.
 
 The query is submitted to the server, and returns some number of
 hit-set records.  Again, the most significant test results are
@@ -464,26 +485,10 @@ sub test {
 	$this = _defaultSession();
     }
 
-    my($query, $msghash) = @_;
+    my($query, $params) = @_;
     $this->_log(4, "'$query' testing");
 
-    my $expected = $this->{index}->find($query);
-    my $count = keys %$expected;
-    my($recnum, $entry);
-
-    if ($count == 0) {
-	$this->_log(1, "'$query' matches no record in expected set");
-    } else {
-	if ($count > 1) {
-	    $this->_log(1, "'$query' matches $count records in ",
-			"expected set - using first");
-	}
-	my @keys = sort { $a <=> $b } keys %$expected;
-	$recnum = $keys[0];
-	$entry = $expected->{$recnum};
-    }
-
-    my $delay = $this->_property("delay");
+    my $delay = $this->_property("delay", $params);
     my $timestamp = $this->{timestamp};
     if (defined $delay && defined $timestamp) {
 	my $waituntil = $delay + $timestamp;
@@ -491,29 +496,31 @@ sub test {
 	sleep ($waituntil-$now) if $waituntil > $now;
     }
 
+    my($token, $entry) = $this->_choose_testset_record($query, $params);
     my($status, $errmsg, $addinfo) =
-	$this->_run_query($query, $recnum, $entry);
+	$this->_run_query($query, $token, $entry);
     $this->{timestamp} = time();
     $this->{status} = $status;
     $this->{errmsg} = $errmsg;
     $this->{addinfo} = $addinfo;
 
-    if ($this->_property("report", $msghash)) {
-	my $msg = $msghash->{$status};
+    if ($this->_property("report", $params)) {
+	my $msg = $params->{$status};
 	my $defaultmsg = $this->_property("messages")->{$status};
 
 	if (defined $msg) {
 	    print $this->_render($msg), "\n";
 	} elsif (defined $defaultmsg) {
 	    print $this->_render($defaultmsg), "\n";
-	} elsif ($status ne "ok") {
-	    print "status='$status'";
+	} elsif ($status eq "fail") {
+	    print "failed";
 	    print ", errmsg='$errmsg'" if defined $errmsg;
 	    print ", addinfo='$addinfo'" if defined $addinfo;
 	    print "\n";
 	} else {
-	    # In the common special case that the test succeeded and
-	    # the "ok" message is undefined, we emit not output at all.
+	    # In the common special case that the test was run without
+	    # error and the message corresponding to the status ("ok"
+	    # or "notfound") is undefined, we emit no output at all.
 	}
     }
 
@@ -521,9 +528,35 @@ sub test {
 }
 
 
+sub _choose_testset_record {
+    my $this = shift();
+    my($query, $params) = @_;
+
+    my $token = $this->_property("token", $params);
+    return ($token, undef)
+	if defined $token;
+
+    my $expected = $this->{index}->find($query);
+    my $count = keys %$expected;
+
+    if ($count == 0) {
+	$this->_log(1, "'$query' matches no record in expected set");
+	return (undef, undef);
+    }
+
+    $this->_log(1, "'$query' matches $count records in ",
+		"expected set - using first")
+	if $count > 1;
+
+    my @keys = sort { $a <=> $b } keys %$expected;
+    $token = $keys[0];
+    return ($token, $expected->{$token});
+}
+
+
 sub _run_query {
     my $this = shift();
-    my($query, $recnum, $entry) = @_;
+    my($query, $token, $entry) = @_;
 
     my $conn = $this->_connection();
     $this->{query} = $query;
@@ -538,11 +571,11 @@ sub _run_query {
     $this->_log(2, "'$query' found no records")
 	if $size == 0;
     $this->_log(2, "'$query' found multiple records ($size)")
-	if $size > 0;
-    $this->_log(3, "'$query' found $size records");
+	if $size > 1;
+    $this->_log(3, "'$query' found $size record", $size == 1 ? "" : "s");
 
-    return "notfound" if !defined $recnum;
-    my $marc = $this->{index}->fetch($recnum);
+    return "notfound" if !defined $token;
+    my $marc = $this->{index}->fetch($token);
 
     for (my $i = 1; $i <= $size; $i++) {
 	my $rec = $rs->record($i)
@@ -560,19 +593,36 @@ sub _same_record {
     my $this = shift();
     my($marc, $nzrec) = @_;
 
-    my $idfield = $this->_property("identityField");
-    if (!defined $idfield) {
+    my $idfields = $this->_property("identityField");
+    if (!defined $idfields) {
 	return ($nzrec->render() eq $marc->as_formatted());
     }
+
+    foreach my $idfield (split /,/, $idfields) {
+	my $same = $this->_same_field($marc, $nzrec, $idfield);
+	return $same if defined $same;
+    }
+
+    die("none of the candidate identity fields ".
+	join(", ", map { "'$_'" } split /,/, $idfields),
+	" exist in both the test-set record and retrieved record");
+}
+
+
+sub _same_field {
+    my $this = shift();
+    my($marc, $nzrec, $idfield) = @_;
 
     my($tag, $subtag) = split /\$/, $idfield;
     my $marc2 = MARC::Record->new_from_usmarc($nzrec->rawdata());
     if (!defined $subtag) {
-	return ($marc->field($tag)->data() eq
-		$marc2->field($tag)->data());
+	my $field = $marc->field($tag) or return undef;
+	my $field2 = $marc2->field($tag) or return undef;
+	return $field->data() eq $field2->data();
     } else {
-	return ($marc->subfield($tag, $subtag) eq
-		$marc2->subfield($tag, $subtag));
+	my $field = $marc->subfield($tag, $subtag) or return undef;
+	my $field2 = $marc2->subfield($tag, $subtag) or return undef;
+	return $field eq $field2;
     }
 }
 

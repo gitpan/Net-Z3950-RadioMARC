@@ -1,4 +1,4 @@
-# $Id: IndexMARC.pm,v 1.6 2004/12/16 17:34:32 quinn Exp $
+# $Id: IndexMARC.pm,v 1.18 2005/02/15 15:43:50 mike Exp $
 
 package Net::Z3950::IndexMARC;
 
@@ -7,6 +7,7 @@ use strict;
 use warnings;
 
 use MARC::Record;
+use Net::Z3950::PQF;
 
 
 =head1 NAME
@@ -56,6 +57,7 @@ sub new {
     return bless {
 	records => [],
 	index => {},		# maps queryable terms into records[]
+	pqf => undef,		# PQF parser, created on demand
     }, $class;
 }
 
@@ -70,6 +72,9 @@ Adds a single MARC record to the specified index.  A reference to the
 record itself is also added, so the record object will not be garbage
 collected until (at least) the index goes out of scope.  The record
 passed in must be of the type MARC::Record.
+
+An opaque token representing the new record is returned.  This may
+subsequently be passed to C<fetch()> to retrieve the record.
 
 =cut
 
@@ -93,9 +98,12 @@ sub add {
 	    my($subtag, $value) = @$ref;
 
 	    ### We might consider a more sophisticated word-parsing scheme
-	    my @words = split /[\s+,\.:\/]/, $value;
-	    for (my $pos = 1; $pos <= @words; $pos++) {
-		my $word = $words[$pos-1];
+	    my @words = (lc($value)); # the whole field is word zero
+	    $value =~ s/^\s+//;
+	    push @words, split(/[\s,\.:\/]+/, $value);
+
+	    for (my $pos = 0; $pos < @words; $pos++) {
+		my $word = $words[$pos];
 		my $indexentry = [ $tag, $subtag, $pos ];
 
 		$word = lc($word); # case-insensitive indexing
@@ -118,6 +126,8 @@ sub add {
 	    }
 	}
     }
+
+    return $reccount;
 }
 
 
@@ -162,25 +172,22 @@ Finds records satisfying the specified PQF query, and returns a
 reference to a hash consisting of one element for each matching
 record.
 
-Each key in the returned hash is a record number, and the
-corresponding values contains details of the hits in that record.  The
-record number is an integer counting the records in the order in which
-they were added to the index, starting at zero.  It can subsequently
-be used to retrieve the record itself.
-
+Each key in the returned hash is an opaque token representing a
+record, which may be fed to C<fetch()> to retrieve the record itself.
+The corresponding value contains details of the hits in that record.
 The hit details consist of an array of arbitrary length, one element
-per occurrence in the record of the searched-for term.  Each element
-of this array is itself an array of three elements: the tag of the
-field in which the term exist [0], the tag of the subfield [2], and
-the word-number within the field, starting from word 1 [3].
+per occurrence of the searched-for term.  Each element of this array
+is itself an array of three elements: the tag of the field in which
+the term exists [0], the tag of the subfield [2], and the word-number
+within the field, starting from word 1 [3].
 
 PQF is Prefix Query Format, as described in the ``Tools'' section of
 the YAZ manual; however, this module does not perform field-specific
 searching since to do so would necessarily involve a mapping between
 Type-1 query access points and MARC fields, which we want to avoid
-having to assume anything about.  Accordingly, I<all> attributes are
-ignored.  Further, at present boolean operations are also ignores, and
-only the last term in the query is used as a single lookup point.
+having to assume anything about.  Accordingly, use attributes are
+ignored.  Further, at present boolean operations are also refused, and
+only the single-term queries are supported.
 
 =cut
 
@@ -188,23 +195,168 @@ sub find {
     my $this = shift();
     my($pqf) = @_;
 
-    ### This is the world's worst PQF implementation
-    my $term = $pqf;
-    $term =~ s/.* //;
+    return { 0 => [] } if @{$this->{records}} == 1;
 
+    $this->{pqf} = new Net::Z3950::PQF()
+	if !defined $this->{pqf};
+
+    my $parser = $this->{pqf};
+    my $node = $parser->parse($pqf);
+    ### Should have a nicer way to report this error
+    die "Can't parse PQF '$pqf': " . $parser->errmsg()
+	if !defined $node;
+
+    return $this->_find($node);
+}
+
+
+sub _find {
+    my $this = shift();
+    my($node) = @_;
+
+    if ($node->isa("Net::Z3950::PQF::TermNode")) {
+	return $this->_find_term($node);
+    } if ($node->isa("Net::Z3950::PQF::BooleanNode")) {
+	return $this->_find_boolean($node);
+    } else {
+	die "unsupported node type $node";
+    }
+}
+
+
+sub _find_term {
+    my $this = shift();
+    my($term) = @_;
+
+    ### This is a very clumsy way to handle truncation etc.
+    my $rs = {};
     my $index = $this->{index};
-    my $wordref = $index->{lc($term)};
-    return {} if !defined $wordref;
-    return $wordref;
+    foreach my $key (keys %$index) {
+	my $hits = $index->{$key};
+	if ($this->_match($term, $key, $hits)) {
+	    foreach my $recnum (keys %$hits) {
+		push @{ $rs->{$recnum} }, @{ $hits->{$recnum} };
+	    }
+	}
+    }
+
+    return $rs;
+}
+
+
+sub _match {
+    my $this = shift();
+    my($term, $key, $hits) = @_;
+
+    my($trunc, $comp);
+    foreach my $attr (@{ $term->{attrs} }) {
+	my($set, $type, $val) = @$attr;
+	# In BIB-1, type 5 is truncation and 6 is completeness
+	$trunc = $val if $type == 5;
+	$comp = $val if $type == 6;
+    }
+
+    my $value = lc($term->{value});
+    if (defined $comp && ($comp == 2 || $comp == 3)) {
+	# Complete subfield or field
+	use Data::Dumper;
+	#print "*whole-field match against '$value': key='$key', hits=", Dumper($hits);
+    }
+
+    my $vlen = length($value);
+    if (!defined $trunc || $trunc == 100) {
+	# No truncation
+	return $value eq $key;
+    } elsif ($trunc == 1) {
+	# Right truncation
+	#print "*testing '$value*' against '$key'\n";
+	return $value eq substr($key, 0, $vlen);
+    } elsif ($trunc == 2) {
+	# Left truncation
+	#print "*testing '*$value' against '$key'\n";
+	return $value eq substr($key, -$vlen, $vlen);
+    } elsif ($trunc == 3) {
+	# Left and right truncation ... sigh
+	my $klen = length($key);
+	#print "*testing '*$value*' against '$key'; vlen=$vlen, klen=$klen\n";
+	for (my $i = 0; $i <= $klen-$vlen; $i++) {
+	    #print " *comparing '$value' to '", substr($key, $i, $vlen), "'\n";
+	    return 1 if $value eq substr($key, $i, $vlen);
+	}
+	return 0;
+    }
+
+    die "unsupported truncation value $trunc";
+}
+
+
+sub _find_boolean {
+    my $this = shift();
+    my($node) = @_;
+
+    my @subres = map { $this->_find($_) } @{ $node->{sub} };
+    my($s1, $s2) = @subres;
+    my $final = {};
+
+    if ($node->isa("Net::Z3950::PQF::AndNode")) {
+	foreach my $key (keys %$s1) {
+	    if (defined $s2->{$key}) {
+		$final->{$key} = $this->_merge_info($s1->{$key}, $s2->{$key});
+	    }
+	}
+
+    } elsif ($node->isa("Net::Z3950::PQF::OrNode")) {
+	my %c2 = %$s2;
+	foreach my $key (keys %$s1) {
+	    if (defined $c2{$key}) {
+		$final->{$key} = $this->_merge_info($s1->{$key}, $c2{$key});
+		delete $c2{$key};
+	    } else {
+		$final->{$key} = $s1->{$key};
+	    }
+	}
+	foreach my $key (keys %c2) {
+	    $final->{$key} = $c2{$key};
+	}
+
+    } elsif ($node->isa("Net::Z3950::PQF::NotNode")) {
+	foreach my $key (keys %$s1) {
+	    if (!defined $s2->{$key}) {
+		$final->{$key} = $s1->{$key};
+	    }
+	}
+
+    } else {
+	die "Unknown boolean node-type: $node";
+    }
+
+    return $final;
+}
+
+
+sub _merge_info {
+    my $this = shift();
+    my($info1, $info2) = @_;
+
+    if (0) {
+	use Data::Dumper;
+	print("_merge_info: ",
+	      "info1=", Dumper($info1),
+	      "info2=", Dumper($info2),
+	      "\n");
+    }
+
+    ### Should do much, much better!
+    return 1;
 }
 
 
 =head2 fetch()
 
- $marc = $index->fetch($recordNumber);
+ $marc = $index->fetch($token);
 
 Returns the MARC::Record object corresponding to the specified record
-number, as returned from find().
+token, as returned from C<add()> or C<find()>.
 
 =cut
 
