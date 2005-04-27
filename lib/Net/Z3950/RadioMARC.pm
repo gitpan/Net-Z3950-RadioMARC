@@ -1,4 +1,4 @@
-# $Id: RadioMARC.pm,v 1.32 2005/03/03 14:52:28 mike Exp $
+# $Id: RadioMARC.pm,v 1.33 2005/04/27 10:44:33 mike Exp $
 
 package Net::Z3950::RadioMARC;
 
@@ -14,7 +14,7 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(set add dumpindex test);
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 
 =head1 NAME

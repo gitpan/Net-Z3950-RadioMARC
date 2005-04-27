@@ -1,4 +1,4 @@
-# $Id: IndexMARC.pm,v 1.18 2005/02/15 15:43:50 mike Exp $
+# $Id: IndexMARC.pm,v 1.19 2005/04/27 10:41:14 mike Exp $
 
 package Net::Z3950::IndexMARC;
 
@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 use MARC::Record;
-use Net::Z3950::PQF;
+use Net::Z3950::PQF 0.03;
 
 
 =head1 NAME
