@@ -1,4 +1,4 @@
-# $Id: IndexMARC.pm,v 1.5 2004/11/29 13:16:17 mike Exp $
+# $Id: IndexMARC.pm,v 1.6 2004/12/16 17:34:32 quinn Exp $
 
 package Net::Z3950::IndexMARC;
 
@@ -93,7 +93,7 @@ sub add {
 	    my($subtag, $value) = @$ref;
 
 	    ### We might consider a more sophisticated word-parsing scheme
-	    my @words = split /\s+/, $value;
+	    my @words = split /[\s+,\.:\/]/, $value;
 	    for (my $pos = 1; $pos <= @words; $pos++) {
 		my $word = $words[$pos-1];
 		my $indexentry = [ $tag, $subtag, $pos ];

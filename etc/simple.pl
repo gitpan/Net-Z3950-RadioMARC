@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# $Id: simple.pl,v 1.11 2004/12/01 17:34:07 mike Exp $
+# $Id: simple.pl,v 1.12 2004/12/16 16:54:06 mike Exp $
 
 use strict;
 use warnings;
@@ -10,7 +10,7 @@ use Net::Z3950::RadioMARC;
 
 set host => 'indexdata.com', port => '210', db => 'gils';
 #set host => 'localhost', port => '9999', db => 'Default';
-set delay => 3;
+set delay => 0;			# Don't delay at all between searches
 set verbosity => 2;
 set messages => { ok => "This is the default 'OK' message" };
 

@@ -1,4 +1,4 @@
-# $Id: RadioMARC.pm,v 1.17 2004/12/01 17:39:24 mike Exp $
+# $Id: RadioMARC.pm,v 1.24 2004/12/17 11:35:58 mike Exp $
 
 package Net::Z3950::RadioMARC;
 
@@ -14,7 +14,7 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(set add dumpindex test);
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 
 =head1 NAME
@@ -117,7 +117,7 @@ sub new {
 	    port => 210,
 	    db => "Default",
 	    format => "USMARC",
-	    delay => 1,		### not yet honoured
+	    delay => 1,
 	    messages => {},
 	    verbosity => 1,
 	    report => 1,
@@ -126,6 +126,7 @@ sub new {
 	index => new Net::Z3950::IndexMARC(),
 	conn => undef,
 	query => undef,
+	timestamp => undef,
 	status => undef,
 	errmsg => undef,
 	addinfo => undef,
@@ -246,9 +247,11 @@ make whatever choices it deems appropriate without side-effects.
 An indication of what MARC field is taken to convey the identity of a
 record for the purposes of comparison.  If a record in a result-set
 has the same identity-field value as the radioactive record being
-tested, then they are regarded as the same record.  It takes the form
-I<tag>C<$>I<subfield>, for example C<245$a> to specify the title
-field.
+tested, then they are regarded as the same record.
+
+It may take the form I<tag> for control fields (for example C<100> to
+specify the local identifier) or I<tag>C<$>I<subfield> (for example
+C<245$a> to specify the title field).
 
 If no identity field is specified, then two records are considered to
 be the same only if they are byte-for-byte identical.
@@ -410,20 +413,26 @@ corresponding to the BIB-1 diagnostic code returned by the server in
 the case of an error, and C<$addinfo> being any additional information
 returned by the server along with such a diagnostic.
 
-If the C<report> property of the test-harness is true, then an message
-is emitted describing the outcome of the test.  Under some
-circumstances, it is useful to inhibit this and use the explicitly
-returned values instead.
+If the C<report> property of the test-harness is true (as it is by
+default), then a report is emitted describing the outcome of the test.
+Under some circumstances, it is useful to inhibit this behaviour by
+setting C<report> false and testing the explicitly returned values
+instead.
 
 The reporting output is generated from a template.  The template is
 found by looking up the status of the test in the hash-reference
 argument, if this is supplied.  If it is not supplied, or if the
 relevant element is missing, it is looked up in the hash that is the
 value of the C<message> property.  If the relevant element is not in
-this hash either, a default template is used.
+this hash either, a default template is used for C<notfound> and
+C<fail> tests, but NO OUTPUT AT ALL is emitted for C<ok> test.  This
+makes it possible to write silent-on-success test scripts.  If you
+want commentary on successful tests, then, you must explicitly specify
+an C<ok> message template, either in the C<message> property or in the
+hash-reference passed into C<test()>.
 
 Report-generating templates are strings which may contain the
-following escape sequencesm, which are substituted the the appropriate
+following escape sequences, which are substituted the the appropriate
 values:
 
 =over 4
@@ -474,28 +483,41 @@ sub test {
 	$entry = $expected->{$recnum};
     }
 
+    my $delay = $this->_property("delay");
+    my $timestamp = $this->{timestamp};
+    if (defined $delay && defined $timestamp) {
+	my $waituntil = $delay + $timestamp;
+	my $now = time();
+	sleep ($waituntil-$now) if $waituntil > $now;
+    }
+
     my($status, $errmsg, $addinfo) =
 	$this->_run_query($query, $recnum, $entry);
+    $this->{timestamp} = time();
     $this->{status} = $status;
     $this->{errmsg} = $errmsg;
     $this->{addinfo} = $addinfo;
 
     if ($this->_property("report", $msghash)) {
 	my $msg = $msghash->{$status};
-	my $dmsg = $this->_property("messages")->{$status};
+	my $defaultmsg = $this->_property("messages")->{$status};
+
 	if (defined $msg) {
-	    print $this->_render($msg);
-	} elsif (defined $dmsg) {
-	    print $this->_render($dmsg);
-	} else {
+	    print $this->_render($msg), "\n";
+	} elsif (defined $defaultmsg) {
+	    print $this->_render($defaultmsg), "\n";
+	} elsif ($status ne "ok") {
 	    print "status='$status'";
 	    print ", errmsg='$errmsg'" if defined $errmsg;
 	    print ", addinfo='$addinfo'" if defined $addinfo;
+	    print "\n";
+	} else {
+	    # In the common special case that the test succeeded and
+	    # the "ok" message is undefined, we emit not output at all.
 	}
-	print "\n";
     }
 
-    return ($status, $errmsg, $addinfo)
+    return wantarray ? ($status, $errmsg, $addinfo): $status;
 }
 
 
@@ -540,15 +562,18 @@ sub _same_record {
 
     my $idfield = $this->_property("identityField");
     if (!defined $idfield) {
-	print "*** comparing whole records\n";
 	return ($nzrec->render() eq $marc->as_formatted());
     }
 
     my($tag, $subtag) = split /\$/, $idfield;
-    print "*** comparing records using tag='$tag', subtag='$subtag'\n";
     my $marc2 = MARC::Record->new_from_usmarc($nzrec->rawdata());
-    return ($marc->subfield($tag, $subtag) eq
-	    $marc2->subfield($tag, $subtag));
+    if (!defined $subtag) {
+	return ($marc->field($tag)->data() eq
+		$marc2->field($tag)->data());
+    } else {
+	return ($marc->subfield($tag, $subtag) eq
+		$marc2->subfield($tag, $subtag));
+    }
 }
 
 

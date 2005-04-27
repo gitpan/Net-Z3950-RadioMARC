@@ -9,6 +9,9 @@ etc/objective.pl
 etc/sample.marc
 etc/set.marc
 etc/simple.pl
+examples/authortest.pl
+examples/keywordtest.pl
+examples/record.mrc
 lib/Net/Z3950/IndexMARC.pm
 lib/Net/Z3950/RadioMARC.pm
 t/01-load.t
