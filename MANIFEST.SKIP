@@ -1,0 +1,8 @@
+.cvsignore
+CVS
+etc/CVS
+lib/CVS
+lib/Net/CVS
+lib/Net/Z3950/CVS
+private
+t/CVS

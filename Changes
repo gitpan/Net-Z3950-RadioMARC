@@ -1,0 +1,21 @@
+$Id: Changes,v 1.4 2004/11/23 17:41:42 mike Exp $
+
+Revision history for Perl extension Net::Z3950::RadioMARC.
+
+0.02  Tue Nov 23 17:40:22 GMT 2004
+	- first released version.
+
+0.01  Sat Nov 20 00:04:43 2004
+	- original version; created by h2xs 1.23 with options
+		-X Net::Z3950::RadioMARC
+
+
+### Still to do:
+	- Meaningful tests
+	- Honour the "delay" property
+	- Recognise "non-diagnostic failures" such as timeouts
+	- Skip tests against servers that are not even there
+	- Have IndexMARC.pm parse PQF properly and handle booleans
+	- Maybe have IndexMARC.pm parse fields more cleverly
+	- Link to an overview paper describing the approach
+
