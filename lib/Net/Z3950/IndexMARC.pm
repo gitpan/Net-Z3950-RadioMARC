@@ -1,4 +1,4 @@
-# $Id: IndexMARC.pm,v 1.4 2004/11/22 23:20:43 mike Exp $
+# $Id: IndexMARC.pm,v 1.5 2004/11/29 13:16:17 mike Exp $
 
 package Net::Z3950::IndexMARC;
 
@@ -20,7 +20,7 @@ Net::Z3950::IndexMARC - Comprehensive but inefficent index for MARC records
  while ($marc = $file->next()) {
      $index->add($marc);
  }
- $index->dump();
+ $index->dump(\*STDOUT);
  $hashref = $index->find('@attr 1=4 dinosaur');
  foreach $i (keys %$hashref) {
     $rec = $index->fetch($i);
@@ -123,9 +123,9 @@ sub add {
 
 =head2 dump()
 
- $index->dump();
+ $index->dump(\*STDOUT);
 
-Dumps the contents of the specified index to the standard output
+Dumps the contents of the specified index to the specified
 stream in human-readable form.  Takes no arguments.  Should only be
 used for debugging.
 
@@ -133,19 +133,21 @@ used for debugging.
 
 sub dump {
     my $this = shift();
+    my($stream) = @_;
 
     my $index = $this->{index};
     foreach my $word (sort keys %$index) {
 	my $wordref = $index->{$word};
 	my $gotWord = 0;
 	foreach my $reccount (sort { $a <=> $b } keys %$wordref) {
-	    print sprintf("%-30s", $gotWord++ ? "" : "'$word'");
+	    print $stream sprintf("%-30s", $gotWord++ ? "" : "'$word'");
 	    my $recref = $wordref->{$reccount};
 	    my $gotRec = 0;
 	    foreach my $indexentry (@$recref) {
-		print sprintf("%-8s", $gotRec++ ? " " x 38 : "rec $reccount");
+		print $stream sprintf("%-8s",
+				      $gotRec++ ? " " x 38 : "rec $reccount");
 		my($tag, $subtag, $pos) = @$indexentry;
-		print "$tag\$$subtag word $pos\n";
+		print $stream "$tag\$$subtag word $pos\n";
 	    }
 	}
     }
@@ -154,7 +156,7 @@ sub dump {
 
 =head2 find()
 
- @hits = $index->find("@and fruit fish");
+ $hithash = $index->find("@and fruit fish");
 
 Finds records satisfying the specified PQF query, and returns a
 reference to a hash consisting of one element for each matching
@@ -199,7 +201,7 @@ sub find {
 
 =head2 fetch()
 
- $marc = $index->find($recordNumber);
+ $marc = $index->fetch($recordNumber);
 
 Returns the MARC::Record object corresponding to the specified record
 number, as returned from find().

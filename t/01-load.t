@@ -1,4 +1,4 @@
-# $Id: Net-Z3950-RadioMARC.t,v 1.1.1.1 2004/11/20 02:08:29 mike Exp $
+# $Id: 01-load.t,v 1.1 2004/11/29 13:39:39 mike Exp $
 
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl Net-Z3950-RadioMARC.t'

@@ -1,4 +1,4 @@
-# $Id: RadioMARC.pm,v 1.14 2004/11/23 17:41:42 mike Exp $
+# $Id: RadioMARC.pm,v 1.17 2004/12/01 17:39:24 mike Exp $
 
 package Net::Z3950::RadioMARC;
 
@@ -14,7 +14,7 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(set add dumpindex test);
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 
 =head1 NAME
@@ -121,6 +121,7 @@ sub new {
 	    messages => {},
 	    verbosity => 1,
 	    report => 1,
+	    identityField => undef,
 	},
 	index => new Net::Z3950::IndexMARC(),
 	conn => undef,
@@ -240,6 +241,18 @@ additional, one-shot property used for a single test, like this:
 which allows the test-script to explicitly check the status and
 make whatever choices it deems appropriate without side-effects.
 
+=item C<identityField> [no default]
+
+An indication of what MARC field is taken to convey the identity of a
+record for the purposes of comparison.  If a record in a result-set
+has the same identity-field value as the radioactive record being
+tested, then they are regarded as the same record.  It takes the form
+I<tag>C<$>I<subfield>, for example C<245$a> to specify the title
+field.
+
+If no identity field is specified, then two records are considered to
+be the same only if they are byte-for-byte identical.
+
 =back
 
 It is an error to try to set a property other than those described
@@ -312,6 +325,8 @@ sub add {
 
 =head2 dumpindex()
 
+ $t->dumpindex();
+
 Dumps to standard output the inverted index generated for the MARC
 records have been added to the test-set by the C<add()> method.
 
@@ -326,7 +341,7 @@ sub dumpindex {
 	$this = _defaultSession();
     }
 
-    $this->{index}->dump();
+    $this->{index}->dump(\*STDOUT);
 }
 
 
@@ -506,16 +521,34 @@ sub _run_query {
 
     return "notfound" if !defined $recnum;
     my $marc = $this->{index}->fetch($recnum);
-    my $ascii = $marc->as_formatted();
 
     for (my $i = 1; $i <= $size; $i++) {
 	my $rec = $rs->record($i)
 	    or return ("fail", $conn->errmsg(), $conn->addinfo());
 	return ("ok")
-	    if $rec->render() eq $ascii;
+	    if $this->_same_record($marc, $rec);
     }
     
     return ("notfound");
+}
+
+
+# PRIVATE to _run_query()
+sub _same_record {
+    my $this = shift();
+    my($marc, $nzrec) = @_;
+
+    my $idfield = $this->_property("identityField");
+    if (!defined $idfield) {
+	print "*** comparing whole records\n";
+	return ($nzrec->render() eq $marc->as_formatted());
+    }
+
+    my($tag, $subtag) = split /\$/, $idfield;
+    print "*** comparing records using tag='$tag', subtag='$subtag'\n";
+    my $marc2 = MARC::Record->new_from_usmarc($nzrec->rawdata());
+    return ($marc->subfield($tag, $subtag) eq
+	    $marc2->subfield($tag, $subtag));
 }
 
 

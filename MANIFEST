@@ -7,7 +7,9 @@ etc/Penny2.mrc
 etc/README
 etc/objective.pl
 etc/sample.marc
+etc/set.marc
 etc/simple.pl
 lib/Net/Z3950/IndexMARC.pm
 lib/Net/Z3950/RadioMARC.pm
-t/Net-Z3950-RadioMARC.t
+t/01-load.t
+t/02-indexmarc.t

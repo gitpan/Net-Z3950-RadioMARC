@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# $Id: objective.pl,v 1.3 2004/11/23 17:06:27 mike Exp $
+# $Id: objective.pl,v 1.4 2004/12/01 17:34:07 mike Exp $
 
 use strict;
 use warnings;
@@ -14,6 +14,7 @@ $t->set(verbosity => 2);
 $t->set(messages => { ok => "This is the default 'OK' message" });
 
 $t->add("etc/sample.marc");
+$t->set(identityField => '710$a');
 
 $t->test('@attr 1=4 data', { ok => '245$a is searchable as 1=4',
 			     notfound => 'Search OK but record not found',
