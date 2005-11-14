@@ -1,4 +1,4 @@
-# $Id: RadioMARC.pm,v 1.33 2005/04/27 10:44:33 mike Exp $
+# $Id: RadioMARC.pm,v 1.35 2005/11/14 10:35:26 mike Exp $
 
 package Net::Z3950::RadioMARC;
 
@@ -14,7 +14,7 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(set add dumpindex test);
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 
 =head1 NAME
@@ -314,7 +314,7 @@ to identify which of the C<add()>ed records is the one that should be
 retrieved from the server.
 
 C<add()> returns a list of opaque tokens representing the newly added
-records.  These tokens may be passed as the C<record> parameter into
+records.  These tokens may be passed as the C<token> parameter into
 the C<test()> method to indicate explicitly which of the test-set
 records a particular query is intended to find.
 
@@ -369,12 +369,12 @@ sub dumpindex {
 
  $t->test('@attr 1=4 01245a01', { ok => '245$a is searchable as 1=4',
                                   notfound => 'This server is broken',
-                                  record => $token });
+                                  token => $token });
  $t->test('@attr 1=4 thrickbrutton');
  # -- or --
  test '@attr 1=4 01245a01', { ok => '245$a is searchable as 1=4',
                               notfound => 'This server is broken',
-                              record => $token };
+                              token => $token };
  test '@attr 1=4 thrickbrutton';
 
 Runs a single test against the server that has been nominated for the
@@ -389,8 +389,8 @@ find.  For maximally indicative results, it should match exactly one
 such record - no more, no less.  If it matches more than one, the the
 first one is used for the subsequent matching process: that is, the
 one that occurred earliest in MARC file that first C<add()>ed to the
-test-set.  If the parameter C<record> is provided, then its value is
-use as the opaque token of the test-set record to be used and the
+test-set.  If the parameter C<token> is provided, then its value is
+used as the opaque token of the test-set record to be used and the
 query is not used for this purpose.
 
 The query is submitted to the server, and returns some number of

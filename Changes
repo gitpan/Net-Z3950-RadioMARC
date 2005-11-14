@@ -1,6 +1,13 @@
-$Id: Changes,v 1.27 2005/04/27 10:45:17 mike Exp $
+$Id: Changes,v 1.30 2005/11/14 10:35:49 mike Exp $
 
 Revision history for Perl extension Net::Z3950::RadioMARC.
+
+0.07  Mon Nov 14 10:35:31 GMT 2005
+	- Fix typo in documentation: the test() method's optional
+	  "token" paremter was previously documented as "record".
+	  Thanks to Jason Thomale <j.thomale@ttu.edu> for spotting and
+	  reporting this.
+	- Add META.yml to distribution.
 
 0.06  Wed Apr 27 11:43:16 BST 2005
 	- Add dependency on Net::Z3950::PQF to Makefile.PL.
